@@ -40,6 +40,8 @@ func makeCluster(route Route) *cluster.Cluster {
 	var endpoints []*endpoint.LbEndpoint
 
 	for _, targetSv := range route.target_servers {
+		port, _ := targetSv.Port.Int64()
+
 		endpoints = append(endpoints, &endpoint.LbEndpoint{
 			HostIdentifier: &endpoint.LbEndpoint_Endpoint{
 				Endpoint: &endpoint.Endpoint{
@@ -47,9 +49,9 @@ func makeCluster(route Route) *cluster.Cluster {
 						Address: &core.Address_SocketAddress{
 							SocketAddress: &core.SocketAddress{
 								Protocol: core.SocketAddress_TCP,
-								Address:  targetSv.ip,
+								Address:  targetSv.Ip,
 								PortSpecifier: &core.SocketAddress_PortValue{
-									PortValue: uint32(targetSv.port),
+									PortValue: uint32(port),
 								},
 							},
 						},
@@ -121,6 +123,9 @@ func makeRoutes(listeners []Listener, routes []Route) []types.Resource {
 	var envoyListeners []types.Resource
 
 	for _, listener := range listeners {
+		if listener.stype != "http" {
+			continue
+		}
 		envoyListeners = append(envoyListeners, makeRoute(listener, routes))
 	}
 
@@ -209,6 +214,7 @@ func createTlsListener(mlistener Listener, routes []Route) *listener.Listener {
 		}
 
 		var tcpProxy = &tcp_proxy.TcpProxy{
+			StatPrefix: "tls",
 			ClusterSpecifier: &tcp_proxy.TcpProxy_Cluster{
 				Cluster: route.uuid,
 			},

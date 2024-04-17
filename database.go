@@ -31,8 +31,8 @@ type Route struct {
 }
 
 type ServerTarget struct {
-	ip   string
-	port int
+	Ip   string      `json:"ip"`
+	Port json.Number `json:"port"`
 }
 
 // "user:password@/dbname"
@@ -47,7 +47,7 @@ func DownloadListeners(url string) ([]Listener, []Route, error) {
 
 	var listeners []Listener
 
-	rows, err := db.Query("SELECT * from listener_listeners")
+	rows, err := db.Query("SELECT * from listeners_listener")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,24 +63,26 @@ func DownloadListeners(url string) ([]Listener, []Route, error) {
 
 	var routes []Route
 
-	rows2, err := db.Query("SELECT * from listener_listeners")
+	rows2, err := db.Query("SELECT * from listeners_route")
 	if err != nil {
 		return nil, nil, err
 	}
 	defer rows2.Close()
 
 	for rows2.Next() {
-		var l Route
+		var r Route
 		var domain_names string
 		var target_servers string
-		if err := rows2.Scan(&l.uuid, &l.listener, &domain_names, &l.keystone_user, &l.project_id, &target_servers, &l.created_on, &l.updated_on); err != nil {
+		if err := rows2.Scan(&r.uuid, &domain_names, &r.keystone_user, &r.project_id, &target_servers, &r.listener, &r.created_on, &r.updated_on); err != nil {
 			return nil, nil, err
 		}
 
-		l.domain_names = strings.Split(domain_names, ",")
-		json.Unmarshal([]byte(target_servers), &l.target_servers)
-
-		routes = append(routes, l)
+		r.domain_names = strings.Split(domain_names, ",")
+		err := json.Unmarshal([]byte(target_servers), &r.target_servers)
+		if err != nil {
+			panic(err)
+		}
+		routes = append(routes, r)
 	}
 
 	return listeners, routes, nil
