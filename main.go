@@ -19,6 +19,10 @@ import (
 	"flag"
 	"os"
 
+	"net/http"
+
+	"fmt"
+
 	"github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/test/v3"
@@ -42,11 +46,13 @@ func init() {
 	flag.StringVar(&nodeID, "nodeID", "test-id", "Node ID")
 }
 
+var cacheR cache.SnapshotCache
+
 func main() {
 	flag.Parse()
 
 	// Create a cache
-	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
+	cacheR = cache.NewSnapshotCache(false, cache.IDHash{}, l)
 
 	// Create the snapshot that we'll serve to Envoy
 	snapshot := GenerateSnapshot()
@@ -57,7 +63,7 @@ func main() {
 	l.Debugf("will serve snapshot %+v", snapshot)
 
 	// Add the snapshot to the cache
-	if err := cache.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
+	if err := cacheR.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
 		l.Errorf("snapshot error %q for %+v", err, snapshot)
 		os.Exit(1)
 	}
@@ -65,6 +71,24 @@ func main() {
 	// Run the xDS server
 	ctx := context.Background()
 	cb := &test.Callbacks{Debug: l.Debug}
-	srv := server.NewServer(ctx, cache, cb)
-	RunServer(srv, port)
+	srv := server.NewServer(ctx, cacheR, cb)
+	go func() { RunServer(srv, port) }()
+	http.HandleFunc("/callback", callback)
+	http.ListenAndServe("172.29.236.1:18001", nil)
+}
+func callback(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(w, "oke\n")
+
+	snapshot := GenerateSnapshot()
+	if err := snapshot.Consistent(); err != nil {
+		l.Errorf("snapshot inconsistency: %+v\n%+v", snapshot, err)
+		os.Exit(1)
+	}
+	l.Debugf("will serve snapshot %+v", snapshot)
+
+	// Add the snapshot to the cache
+	if err := cacheR.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
+		l.Errorf("snapshot error %q for %+v", err, snapshot)
+		os.Exit(1)
+	}
 }

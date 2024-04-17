@@ -272,7 +272,15 @@ func createTlsListener(mlistener Listener, routes []Route) *listener.Listener {
 func makeListeners(listeners []Listener, routes []Route) []types.Resource {
 	var envoyListeners []types.Resource
 
+	aa := map[string]bool{}
+	for _, route := range routes {
+		aa[route.listener] = true
+	}
+
 	for _, listener := range listeners {
+		if !aa[listener.uuid] {
+			continue
+		}
 		if listener.stype == "http" {
 			envoyListeners = append(envoyListeners, createHttpListener(listener, routes))
 		} else if listener.stype == "tls" {
@@ -307,7 +315,7 @@ func GenerateSnapshot() *cache.Snapshot {
 		panic(err)
 	}
 
-	snap, _ := cache.NewSnapshot("1",
+	snap, _ := cache.NewSnapshot(time.Now().String(),
 		map[resource.Type][]types.Resource{
 			resource.ClusterType:  makeClusters(routes),
 			resource.RouteType:    makeRoutes(listeners, routes),
